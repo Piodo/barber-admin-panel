@@ -8,13 +8,9 @@ import {
   updateDoc, 
   deleteDoc, 
   doc,
-  onSnapshot,
-  serverTimestamp,
-  query,
-  orderBy
+  onSnapshot 
 } from 'firebase/firestore';
 
-// STYLES DEFINITION
 const dashboardContainerStyle = {
   backgroundColor: '#1C1D1D',
   minHeight: '100vh',
@@ -31,7 +27,6 @@ const headerStyle = {
   justifyContent: 'space-between',
   alignItems: 'center',
   borderBottom: '1px solid #333',
-  position: 'relative',
 };
 
 const logoutButtonStyle = {
@@ -168,8 +163,6 @@ const modalContentStyle = {
   borderRadius: '8px',
   width: '90%',
   maxWidth: '500px',
-  maxHeight: '80vh',
-  overflowY: 'auto',
   color: 'white',
 };
 
@@ -188,55 +181,14 @@ const notificationStyle = (type) => ({
 const lowStockBadgeStyle = {
   backgroundColor: '#dc3545',
   color: 'white',
-  padding: '8px 15px',
-  borderRadius: '20px',
-  fontSize: '14px',
-  fontWeight: 'bold',
-  marginLeft: '15px',
-  display: 'flex',
-  alignItems: 'center',
-  gap: '8px',
-  cursor: 'pointer',
-  animation: 'pulse 2s infinite',
-};
-
-// New style for persistent alert banner
-const alertBannerStyle = {
-  backgroundColor: '#dc3545',
-  color: 'white',
-  padding: '15px 20px',
-  textAlign: 'center',
-  fontWeight: 'bold',
-  fontSize: '16px',
-  position: 'sticky',
-  top: '0',
-  zIndex: 999,
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  boxShadow: '0 2px 10px rgba(0,0,0,0.3)',
-};
-
-const closeAlertButtonStyle = {
-  backgroundColor: 'transparent',
-  color: 'white',
-  border: '1px solid white',
-  padding: '5px 10px',
-  borderRadius: '4px',
-  cursor: 'pointer',
+  padding: '4px 8px',
+  borderRadius: '12px',
   fontSize: '12px',
+  fontWeight: 'bold',
+  marginLeft: '10px',
 };
 
-// Add CSS animation for pulsing effect
-const styles = `
-@keyframes pulse {
-  0% { opacity: 1; }
-  50% { opacity: 0.7; }
-  100% { opacity: 1; }
-}
-`;
-
-// Helper Components
+// --- Helper Components ---
 const Notification = ({ message, type, onClose }) => {
   useEffect(() => {
     const timer = setTimeout(onClose, 3000);
@@ -271,13 +223,10 @@ const AdminDashboard = ({ onLogout }) => {
   const [barbers, setBarbers] = useState([]);
   const [inventory, setInventory] = useState([]);
   const [appointments, setAppointments] = useState([]);
-  const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [notification, setNotification] = useState(null);
   const [lowStockItems, setLowStockItems] = useState([]);
-  const [showLowStockAlert, setShowLowStockAlert] = useState(false);
-  const [showLowStockModal, setShowLowStockModal] = useState(false);
 
   // Form states
   const [showBarberForm, setShowBarberForm] = useState(false);
@@ -303,24 +252,14 @@ const AdminDashboard = ({ onLogout }) => {
     supplier: ''
   });
 
-  // Add CSS styles for animation
-  useEffect(() => {
-    const styleSheet = document.createElement("style");
-    styleSheet.innerText = styles;
-    document.head.appendChild(styleSheet);
-    
-    return () => {
-      document.head.removeChild(styleSheet);
-    };
-  }, []);
-
+  // Add this helper function to fix the date issue
   const getAppointmentDate = (appointment) => {
     if (typeof appointment.date === 'string') {
       return new Date(appointment.date);
     } else if (appointment.date && typeof appointment.date.toDate === 'function') {
       return appointment.date.toDate();
     } else {
-      return new Date();
+      return new Date(); // fallback
     }
   };
 
@@ -332,72 +271,49 @@ const AdminDashboard = ({ onLogout }) => {
     setNotification(null);
   };
 
-  // ✅ REAL-TIME FIREBASE SYNC
+  // Fetch data
   useEffect(() => {
-    setLoading(true);
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        
+        // Fetch Barbers
+        const barbersCol = collection(db, 'barbers');
+        const barbersSnapshot = await getDocs(barbersCol);
+        const barbersList = barbersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setBarbers(barbersList);
 
-    // Real-time Barbers
-    const unsubscribeBarbers = onSnapshot(collection(db, 'barbers'), (snapshot) => {
-      const barbersList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setBarbers(barbersList);
-    });
+        // Fetch Inventory
+        const inventoryCol = collection(db, 'inventory');
+        const inventorySnapshot = await getDocs(inventoryCol);
+        const inventoryList = inventorySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setInventory(inventoryList);
 
-    // Real-time Inventory
-    const unsubscribeInventory = onSnapshot(collection(db, 'inventory'), (snapshot) => {
-      const inventoryList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setInventory(inventoryList);
-    });
+        // Fetch Appointments
+        const appointmentsCol = collection(db, 'appointments');
+        const appointmentsSnapshot = await getDocs(appointmentsCol);
+        const appointmentsList = appointmentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setAppointments(appointmentsList);
 
-    // Real-time Appointments
-    const unsubscribeAppointments = onSnapshot(collection(db, 'appointments'), (snapshot) => {
-      const appointmentsList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setAppointments(appointmentsList);
-    });
-
-    // Real-time Payments
-    const paymentsQuery = query(collection(db, 'payments'), orderBy('paymentDate', 'desc'));
-    const unsubscribePayments = onSnapshot(paymentsQuery, (snapshot) => {
-      const paymentsList = snapshot.docs.map(doc => ({ 
-        id: doc.id, 
-        ...doc.data(),
-        paymentDate: doc.data().paymentDate ? doc.data().paymentDate.toDate() : null
-      }));
-      setPayments(paymentsList);
-    });
-
-    setLoading(false);
-
-    // Cleanup subscriptions
-    return () => {
-      unsubscribeBarbers();
-      unsubscribeInventory();
-      unsubscribeAppointments();
-      unsubscribePayments();
+        setError(null);
+      } catch (err) {
+        console.error("Error fetching admin data:", err);
+        setError("Failed to load data: " + err.message);
+      } finally {
+        setLoading(false);
+      }
     };
+
+    fetchData();
   }, []);
 
-  // Monitor low stock items PERMANENTLY
+  // Monitor low stock items
   useEffect(() => {
-    const checkLowStock = () => {
-      const lowStock = inventory.filter(item => {
-        const quantity = parseInt(item.quantity) || 0;
-        const minStock = parseInt(item.minStock) || 5;
-        return quantity <= minStock;
-      });
-      setLowStockItems(lowStock);
-      setShowLowStockAlert(lowStock.length > 0);
-    };
-
-    checkLowStock();
+    const lowStock = inventory.filter(item => 
+      parseInt(item.quantity) <= parseInt(item.minStock || 5)
+    );
+    setLowStockItems(lowStock);
   }, [inventory]);
-
-  // Check for critical stock (0 or negative)
-  const getCriticalStockItems = () => {
-    return inventory.filter(item => {
-      const quantity = parseInt(item.quantity) || 0;
-      return quantity <= 0;
-    });
-  };
 
   // CRUD Operations for Barbers
   const handleBarberSubmit = async (e) => {
@@ -405,9 +321,11 @@ const AdminDashboard = ({ onLogout }) => {
     try {
       if (editingBarber) {
         await updateDoc(doc(db, 'barbers', editingBarber.id), barberForm);
+        setBarbers(barbers.map(b => b.id === editingBarber.id ? { ...b, ...barberForm } : b));
         showNotification('Barber updated successfully!');
       } else {
-        await addDoc(collection(db, 'barbers'), barberForm);
+        const docRef = await addDoc(collection(db, 'barbers'), barberForm);
+        setBarbers([...barbers, { id: docRef.id, ...barberForm }]);
         showNotification('Barber added successfully!');
       }
       
@@ -423,6 +341,7 @@ const AdminDashboard = ({ onLogout }) => {
     if (window.confirm('Are you sure you want to delete this barber?')) {
       try {
         await deleteDoc(doc(db, 'barbers', id));
+        setBarbers(barbers.filter(b => b.id !== id));
         showNotification('Barber deleted successfully!');
       } catch (err) {
         showNotification('Error deleting barber: ' + err.message, 'error');
@@ -450,18 +369,16 @@ const AdminDashboard = ({ onLogout }) => {
         ...inventoryForm,
         quantity: parseInt(inventoryForm.quantity),
         minStock: parseInt(inventoryForm.minStock),
-        price: parseFloat(inventoryForm.price),
-        updatedAt: serverTimestamp()
+        price: parseFloat(inventoryForm.price)
       };
 
       if (editingInventory) {
         await updateDoc(doc(db, 'inventory', editingInventory.id), inventoryData);
+        setInventory(inventory.map(i => i.id === editingInventory.id ? { ...i, ...inventoryData } : i));
         showNotification('Inventory item updated successfully!');
       } else {
-        await addDoc(collection(db, 'inventory'), {
-          ...inventoryData,
-          createdAt: serverTimestamp()
-        });
+        const docRef = await addDoc(collection(db, 'inventory'), inventoryData);
+        setInventory([...inventory, { id: docRef.id, ...inventoryData }]);
         showNotification('Inventory item added successfully!');
       }
       
@@ -477,6 +394,7 @@ const AdminDashboard = ({ onLogout }) => {
     if (window.confirm('Are you sure you want to delete this inventory item?')) {
       try {
         await deleteDoc(doc(db, 'inventory', id));
+        setInventory(inventory.filter(i => i.id !== id));
         showNotification('Inventory item deleted successfully!');
       } catch (err) {
         showNotification('Error deleting inventory item: ' + err.message, 'error');
@@ -497,51 +415,6 @@ const AdminDashboard = ({ onLogout }) => {
     setShowInventoryForm(true);
   };
 
-  // Restock function
-  const handleRestock = async (itemId, additionalQuantity) => {
-    try {
-      const itemRef = doc(db, 'inventory', itemId);
-      const item = inventory.find(i => i.id === itemId);
-      
-      if (!item) return;
-      
-      const newQuantity = parseInt(item.quantity) + parseInt(additionalQuantity);
-      
-      await updateDoc(itemRef, {
-        quantity: newQuantity,
-        updatedAt: serverTimestamp()
-      });
-      
-      showNotification(`Restocked ${item.name} by ${additionalQuantity} units!`);
-      
-      // Close modal if all low stock items are resolved
-      const updatedLowStock = lowStockItems.filter(i => i.id !== itemId);
-      if (updatedLowStock.length === 0) {
-        setShowLowStockAlert(false);
-      }
-    } catch (err) {
-      showNotification('Error restocking item: ' + err.message, 'error');
-    }
-  };
-
-  // Helper function to format date
-  const formatDate = (date) => {
-    if (!date) return 'N/A';
-    
-    if (typeof date === 'string') {
-      return new Date(date).toLocaleDateString();
-    }
-    
-    if (date instanceof Date) {
-      return date.toLocaleDateString();
-    }
-    
-    return 'N/A';
-  };
-
-  // Get critical stock items
-  const criticalStockItems = getCriticalStockItems();
-
   if (loading) {
     return <div style={{ textAlign: 'center', marginTop: '100px', color: 'white' }}>Loading...</div>;
   }
@@ -556,49 +429,12 @@ const AdminDashboard = ({ onLogout }) => {
         />
       )}
 
-      {/* PERMANENT LOW STOCK ALERT BANNER - Only disappears when stock is adequate */}
-      {showLowStockAlert && (
-        <div style={alertBannerStyle}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '18px' }}>⚠️</span>
-            <span>
-              {lowStockItems.length} item{lowStockItems.length > 1 ? 's' : ''} {lowStockItems.length > 1 ? 'are' : 'is'} running low on stock!
-              {criticalStockItems.length > 0 && (
-                <span style={{ marginLeft: '10px', fontWeight: 'bold' }}>
-                  ({criticalStockItems.length} item{criticalStockItems.length > 1 ? 's' : ''} out of stock!)
-                </span>
-              )}
-            </span>
-          </div>
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <button 
-              onClick={() => setShowLowStockModal(true)}
-              style={{ ...buttonStyle, backgroundColor: 'white', color: '#dc3545', margin: 0 }}
-            >
-              View Details
-            </button>
-            <button 
-              onClick={() => setShowLowStockAlert(false)}
-              style={closeAlertButtonStyle}
-            >
-              Hide Alert
-            </button>
-          </div>
-        </div>
-      )}
-
       <header style={headerStyle}>
         <div style={{ display: 'flex', alignItems: 'center' }}>
           <h1 style={{ color: '#BD9245', margin: '0', marginRight: '20px' }}>Admin Panel</h1>
-          {/* Always visible low stock badge in header */}
           {lowStockItems.length > 0 && (
-            <div 
-              style={lowStockBadgeStyle}
-              onClick={() => setShowLowStockModal(true)}
-              title="Click to view low stock items"
-            >
-              <span>⚠️</span>
-              <span>{lowStockItems.length} Low Stock</span>
+            <div style={lowStockBadgeStyle}>
+              {lowStockItems.length} Low Stock Alert{lowStockItems.length > 1 ? 's' : ''}
             </div>
           )}
         </div>
@@ -606,51 +442,20 @@ const AdminDashboard = ({ onLogout }) => {
       </header>
 
       <nav style={navStyle}>
-        <button 
-          style={tabButtonStyle(activeTab === 'dashboard')} 
-          onClick={() => setActiveTab('dashboard')}
-        >
-          Dashboard
-        </button>
-        <button 
-          style={tabButtonStyle(activeTab === 'barbers')} 
-          onClick={() => setActiveTab('barbers')}
-        >
-          Barbers
-        </button>
-        <button 
-          style={tabButtonStyle(activeTab === 'appointments')} 
-          onClick={() => setActiveTab('appointments')}
-        >
-          Appointments
-        </button>
-        <button 
-          style={tabButtonStyle(activeTab === 'inventory')} 
-          onClick={() => setActiveTab('inventory')}
-        >
-          Inventory
-        </button>
-        <button 
-          style={tabButtonStyle(activeTab === 'pos')} 
-          onClick={() => setActiveTab('pos')}
-        >
-          POS
-        </button>
+        <button style={tabButtonStyle(activeTab === 'dashboard')} onClick={() => setActiveTab('dashboard')}>Dashboard</button>
+        <button style={tabButtonStyle(activeTab === 'barbers')} onClick={() => setActiveTab('barbers')}>Barbers</button>
+        <button style={tabButtonStyle(activeTab === 'appointments')} onClick={() => setActiveTab('appointments')}>Appointments</button>
+        <button style={tabButtonStyle(activeTab === 'inventory')} onClick={() => setActiveTab('inventory')}>Inventory</button>
+        <button style={tabButtonStyle(activeTab === 'pos')} onClick={() => setActiveTab('pos')}>POS</button>
       </nav>
 
       <main style={mainContentStyle}>
         {error && <p style={{ textAlign: 'center', color: 'red' }}>Error: {error}</p>}
 
-        {/* DASHBOARD TAB */}
         {activeTab === 'dashboard' && (
           <div>
             <h2 style={{ color: '#BD9245', marginBottom: '20px' }}>Dashboard Overview</h2>
-            <div style={{ 
-              display: 'grid', 
-              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
-              gap: '20px', 
-              marginBottom: '30px' 
-            }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '30px' }}>
               <div style={sectionStyle}>
                 <h3 style={{ color: '#BD9245', margin: '0 0 10px 0' }}>Total Barbers</h3>
                 <div style={{ fontSize: '24px', fontWeight: 'bold' }}>{barbers.length}</div>
@@ -664,90 +469,49 @@ const AdminDashboard = ({ onLogout }) => {
                 <div style={{ fontSize: '24px', fontWeight: 'bold' }}>{inventory.length}</div>
               </div>
               <div style={sectionStyle}>
-                <h3 style={{ color: '#BD9245', margin: '0 0 10px 0' }}>Total Revenue</h3>
-                <div style={{ fontSize: '24px', fontWeight: 'bold' }}>
-                  ₱{payments.reduce((sum, payment) => sum + (payment.amount || 0), 0).toFixed(2)}
-                </div>
-              </div>
-              <div style={sectionStyle}>
                 <h3 style={{ color: '#BD9245', margin: '0 0 10px 0' }}>Low Stock Items</h3>
-                <div style={{ 
-                  fontSize: '24px', 
-                  fontWeight: 'bold', 
-                  color: lowStockItems.length > 0 ? '#dc3545' : '#28a745',
-                  cursor: lowStockItems.length > 0 ? 'pointer' : 'default'
-                }}
-                onClick={() => lowStockItems.length > 0 && setShowLowStockModal(true)}>
+                <div style={{ fontSize: '24px', fontWeight: 'bold', color: lowStockItems.length > 0 ? '#dc3545' : 'white' }}>
                   {lowStockItems.length}
                 </div>
               </div>
             </div>
 
-            {/* Quick Restock Section */}
             {lowStockItems.length > 0 && (
               <div style={sectionStyle}>
-                <h3 style={sectionTitleStyle}>
-                  ⚠️ Immediate Attention Needed
-                  <button 
-                    onClick={() => setShowLowStockModal(true)}
-                    style={{ ...buttonStyle, backgroundColor: '#dc3545', color: 'white' }}
-                  >
-                    Manage All Low Stock Items
-                  </button>
-                </h3>
-                <div style={{ 
-                  display: 'grid', 
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', 
-                  gap: '15px' 
-                }}>
-                  {lowStockItems.slice(0, 4).map(item => (
-                    <div key={item.id} style={{
-                      backgroundColor: '#333',
-                      padding: '15px',
-                      borderRadius: '8px',
-                      borderLeft: `5px solid ${parseInt(item.quantity) <= 0 ? '#dc3545' : '#ffc107'}`,
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center'
-                    }}>
-                      <div>
-                        <h4 style={{ color: '#BD9245', margin: '0 0 5px 0' }}>{item.name}</h4>
-                        <p style={{ margin: '0', fontSize: '14px', color: '#aaa' }}>
-                          Category: {item.category}
-                        </p>
-                        <p style={{ margin: '5px 0', fontSize: '14px', color: '#aaa' }}>
-                          Current: <span style={{ 
-                            color: parseInt(item.quantity) <= 0 ? '#dc3545' : '#ffc107',
-                            fontWeight: 'bold'
-                          }}>{item.quantity}</span> | Minimum: {item.minStock}
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => handleInventoryEdit(item)}
-                        style={{ ...buttonStyle, fontSize: '12px', padding: '6px 12px' }}
-                      >
-                        Restock
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                {lowStockItems.length > 4 && (
-                  <p style={{ textAlign: 'center', marginTop: '15px', color: '#ffc107' }}>
-                    ...and {lowStockItems.length - 4} more items need attention
-                  </p>
-                )}
+                <h3 style={sectionTitleStyle}>⚠️ Low Stock Alerts</h3>
+                <table style={tableStyle}>
+                  <thead>
+                    <tr>
+                      <th style={thStyle}>Item Name</th>
+                      <th style={thStyle}>Current Stock</th>
+                      <th style={thStyle}>Min Stock</th>
+                      <th style={thStyle}>Category</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lowStockItems.map(item => (
+                      <tr key={item.id}>
+                        <td style={tdStyle}>{item.name}</td>
+                        <td style={{ ...tdStyle, color: '#dc3545', fontWeight: 'bold' }}>{item.quantity}</td>
+                        <td style={tdStyle}>{item.minStock}</td>
+                        <td style={tdStyle}>{item.category}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
         )}
 
-        {/* Other tabs remain the same as before */}
-        {/* BARBERS TAB */}
         {activeTab === 'barbers' && (
           <div style={sectionStyle}>
             <h3 style={sectionTitleStyle}>
               Barbers Management
-              <button onClick={() => setShowBarberForm(true)} style={buttonStyle}>
+              <button 
+                onClick={() => setShowBarberForm(true)} 
+                style={buttonStyle}
+              >
                 Add New Barber
               </button>
             </h3>
@@ -782,10 +546,16 @@ const AdminDashboard = ({ onLogout }) => {
                       </span>
                     </td>
                     <td style={tdStyle}>
-                      <button onClick={() => handleBarberEdit(barber)} style={{ ...buttonStyle, marginRight: '8px' }}>
+                      <button 
+                        onClick={() => handleBarberEdit(barber)}
+                        style={{ ...buttonStyle, marginRight: '8px' }}
+                      >
                         Edit
                       </button>
-                      <button onClick={() => handleBarberDelete(barber.id)} style={dangerButtonStyle}>
+                      <button 
+                        onClick={() => handleBarberDelete(barber.id)}
+                        style={dangerButtonStyle}
+                      >
                         Delete
                       </button>
                     </td>
@@ -796,12 +566,14 @@ const AdminDashboard = ({ onLogout }) => {
           </div>
         )}
 
-        {/* INVENTORY TAB */}
         {activeTab === 'inventory' && (
           <div style={sectionStyle}>
             <h3 style={sectionTitleStyle}>
               Inventory Management
-              <button onClick={() => setShowInventoryForm(true)} style={buttonStyle}>
+              <button 
+                onClick={() => setShowInventoryForm(true)} 
+                style={buttonStyle}
+              >
                 Add New Item
               </button>
             </h3>
@@ -832,7 +604,7 @@ const AdminDashboard = ({ onLogout }) => {
                       {item.quantity}
                     </td>
                     <td style={tdStyle}>{item.minStock}</td>
-                    <td style={tdStyle}>₱{item.price?.toFixed(2) || '0.00'}</td>
+                    <td style={tdStyle}>${item.price?.toFixed(2)}</td>
                     <td style={tdStyle}>{item.supplier || 'N/A'}</td>
                     <td style={tdStyle}>
                       <span style={{
@@ -846,10 +618,16 @@ const AdminDashboard = ({ onLogout }) => {
                       </span>
                     </td>
                     <td style={tdStyle}>
-                      <button onClick={() => handleInventoryEdit(item)} style={{ ...buttonStyle, marginRight: '8px' }}>
+                      <button 
+                        onClick={() => handleInventoryEdit(item)}
+                        style={{ ...buttonStyle, marginRight: '8px' }}
+                      >
                         Edit
                       </button>
-                      <button onClick={() => handleInventoryDelete(item.id)} style={dangerButtonStyle}>
+                      <button 
+                        onClick={() => handleInventoryDelete(item.id)}
+                        style={dangerButtonStyle}
+                      >
                         Delete
                       </button>
                     </td>
@@ -860,7 +638,6 @@ const AdminDashboard = ({ onLogout }) => {
           </div>
         )}
 
-        {/* APPOINTMENTS TAB */}
         {activeTab === 'appointments' && (
           <div style={sectionStyle}>
             <h3 style={sectionTitleStyle}>Appointments</h3>
@@ -879,17 +656,15 @@ const AdminDashboard = ({ onLogout }) => {
                 <tbody>
                   {appointments.map(app => (
                     <tr key={app.id}>
-                      <td style={tdStyle}>{app.customerName || 'N/A'}</td>
+                      <td style={tdStyle}>{app.fullName || app.customerName || 'N/A'}</td>
                       <td style={tdStyle}>{app.barberName || 'N/A'}</td>
                       <td style={tdStyle}>{app.service}</td>
-                      <td style={tdStyle}>
-                        {app.date ? getAppointmentDate(app).toLocaleDateString() : 'N/A'}
-                      </td>
+                      <td style={tdStyle}>{app.date ? getAppointmentDate(app).toLocaleDateString() : 'N/A'}</td>
                       <td style={tdStyle}>{app.time}</td>
                       <td style={tdStyle}>
                         <span style={{
                           backgroundColor: app.status === 'confirmed' ? '#28a745' : 
-                                       app.status === 'pending' ? '#ffc107' : '#dc3545',
+                                         app.status === 'pending' ? '#ffc107' : '#dc3545',
                           color: app.status === 'pending' ? 'black' : 'white',
                           padding: '4px 8px',
                           borderRadius: '4px',
@@ -908,155 +683,15 @@ const AdminDashboard = ({ onLogout }) => {
           </div>
         )}
 
-        {/* POS TAB */}
         {activeTab === 'pos' && (
           <div style={sectionStyle}>
-            <h3 style={sectionTitleStyle}>
-              Point of Sale - Transaction History
-            </h3>
-            
-            {payments.length > 0 ? (
-              <table style={tableStyle}>
-                <thead>
-                  <tr>
-                    <th style={thStyle}>Customer Name</th>
-                    <th style={thStyle}>Amount</th>
-                    <th style={thStyle}>Payment Status</th>
-                    <th style={thStyle}>Transaction ID</th>
-                    <th style={thStyle}>Date</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {payments.map(payment => (
-                    <tr key={payment.id}>
-                      <td style={tdStyle}>
-                        {payment.customerName || 'Walk-in Customer'}
-                      </td>
-                      <td style={{ ...tdStyle, fontWeight: 'bold', color: '#BD9245' }}>
-                        ₱{payment.amount?.toFixed(2) || '0.00'}
-                      </td>
-                      <td style={tdStyle}>
-                        <span style={{
-                          backgroundColor: payment.paymentStatus === 'completed' ? '#28a745' : 
-                                       payment.paymentStatus === 'pending' ? '#ffc107' : '#dc3545',
-                          color: payment.paymentStatus === 'pending' ? 'black' : 'white',
-                          padding: '4px 8px',
-                          borderRadius: '4px',
-                          fontSize: '12px'
-                        }}>
-                          {payment.paymentStatus || 'N/A'}
-                        </span>
-                      </td>
-                      <td style={{ ...tdStyle, fontFamily: 'monospace', fontSize: '12px' }}>
-                        {payment.transactionId || payment.id}
-                      </td>
-                      <td style={{ ...tdStyle, fontSize: '14px' }}>
-                        {formatDate(payment.paymentDate)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <div style={{ textAlign: 'center', padding: '40px' }}>
-                <p style={{ color: '#aaa', marginBottom: '20px' }}>No transactions yet</p>
-              </div>
-            )}
+            <h3 style={sectionTitleStyle}>Point of Sale</h3>
+            <p style={{ color: '#aaa' }}>POS system coming soon...</p>
           </div>
         )}
       </main>
 
-      {/* LOW STOCK MODAL - Shows all low stock items */}
-      <Modal
-        isOpen={showLowStockModal}
-        onClose={() => setShowLowStockModal(false)}
-        title="⚠️ Low Stock Items Management"
-      >
-        <div>
-          <p style={{ color: '#aaa', marginBottom: '20px' }}>
-            The following items are running low on stock. Please restock to maintain inventory levels.
-          </p>
-          
-          {lowStockItems.length > 0 ? (
-            <div>
-              <table style={{ ...tableStyle, marginBottom: '20px' }}>
-                <thead>
-                  <tr>
-                    <th style={thStyle}>Item Name</th>
-                    <th style={thStyle}>Current</th>
-                    <th style={thStyle}>Min Required</th>
-                    <th style={thStyle}>Status</th>
-                    <th style={thStyle}>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {lowStockItems.map(item => (
-                    <tr key={item.id}>
-                      <td style={tdStyle}>
-                        <strong>{item.name}</strong>
-                        <div style={{ fontSize: '12px', color: '#aaa' }}>{item.category}</div>
-                      </td>
-                      <td style={{
-                        ...tdStyle,
-                        color: parseInt(item.quantity) <= 0 ? '#dc3545' : '#ffc107',
-                        fontWeight: 'bold',
-                        fontSize: '16px'
-                      }}>
-                        {item.quantity}
-                      </td>
-                      <td style={tdStyle}>{item.minStock}</td>
-                      <td style={tdStyle}>
-                        <span style={{
-                          backgroundColor: parseInt(item.quantity) <= 0 ? '#dc3545' : '#ffc107',
-                          color: 'white',
-                          padding: '4px 8px',
-                          borderRadius: '4px',
-                          fontSize: '12px'
-                        }}>
-                          {parseInt(item.quantity) <= 0 ? 'OUT OF STOCK' : 'LOW STOCK'}
-                        </span>
-                      </td>
-                      <td style={tdStyle}>
-                        <button
-                          onClick={() => {
-                            setShowLowStockModal(false);
-                            handleInventoryEdit(item);
-                          }}
-                          style={{ ...buttonStyle, fontSize: '12px', padding: '6px 12px' }}
-                        >
-                          Restock
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              
-              <div style={{ backgroundColor: '#333', padding: '15px', borderRadius: '8px', marginTop: '20px' }}>
-                <h4 style={{ color: '#BD9245', marginTop: 0 }}>Quick Restock</h4>
-                <p style={{ color: '#aaa', fontSize: '14px', marginBottom: '15px' }}>
-                  Need to restock multiple items? Use the inventory tab for bulk operations.
-                </p>
-                <button
-                  onClick={() => {
-                    setShowLowStockModal(false);
-                    setActiveTab('inventory');
-                  }}
-                  style={{ ...buttonStyle, width: '100%' }}
-                >
-                  Go to Inventory Management
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div style={{ textAlign: 'center', padding: '20px' }}>
-              <p style={{ color: '#28a745', fontSize: '18px' }}>✅ All inventory items are well stocked!</p>
-            </div>
-          )}
-        </div>
-      </Modal>
-
-      {/* Existing modals... */}
+      {/* Barber Form Modal */}
       <Modal
         isOpen={showBarberForm}
         onClose={() => {
@@ -1113,6 +748,7 @@ const AdminDashboard = ({ onLogout }) => {
         </form>
       </Modal>
 
+      {/* Inventory Form Modal */}
       <Modal
         isOpen={showInventoryForm}
         onClose={() => {
@@ -1185,4 +821,5 @@ const AdminDashboard = ({ onLogout }) => {
     </div>
   );
 };
+
 export default AdminDashboard;
