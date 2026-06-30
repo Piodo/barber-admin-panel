@@ -1,14 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { auth, db } from '../firebaseConfig';
-import { signOut } from 'firebase/auth';
+import { db } from '../firebaseConfig';
 import { 
   collection, 
   getDocs, 
   addDoc, 
   updateDoc, 
   deleteDoc, 
-  doc,
-  onSnapshot 
+  doc
 } from 'firebase/firestore';
 
 const dashboardContainerStyle = {
