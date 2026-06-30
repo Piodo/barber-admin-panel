@@ -221,6 +221,7 @@ const AdminDashboard = ({ onLogout }) => {
   const [barbers, setBarbers] = useState([]);
   const [inventory, setInventory] = useState([]);
   const [appointments, setAppointments] = useState([]);
+  const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [notification, setNotification] = useState(null);
@@ -261,6 +262,18 @@ const AdminDashboard = ({ onLogout }) => {
     }
   };
 
+  // Helper to normalize Firestore Timestamp / string into a JS Date
+  const getPaymentDate = (payment) => {
+    if (!payment.paymentDate) return null;
+    if (typeof payment.paymentDate.toDate === 'function') {
+      return payment.paymentDate.toDate();
+    }
+    if (typeof payment.paymentDate === 'string') {
+      return new Date(payment.paymentDate);
+    }
+    return null;
+  };
+
   const showNotification = (message, type = 'success') => {
     setNotification({ message, type });
   };
@@ -293,6 +306,12 @@ const AdminDashboard = ({ onLogout }) => {
         const appointmentsList = appointmentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setAppointments(appointmentsList);
 
+        // Fetch Payments
+        const paymentsCol = collection(db, 'payments');
+        const paymentsSnapshot = await getDocs(paymentsCol);
+        const paymentsList = paymentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setPayments(paymentsList);
+
         setError(null);
       } catch (err) {
         console.error("Error fetching admin data:", err);
@@ -312,6 +331,16 @@ const AdminDashboard = ({ onLogout }) => {
     );
     setLowStockItems(lowStock);
   }, [inventory]);
+
+  // Only completed payments are treated as real revenue / shown in POS
+  const completedPayments = payments.filter(p => p.paymentStatus === 'completed');
+
+  const totalRevenue = completedPayments.reduce(
+    (sum, p) => sum + (parseFloat(p.amount) || 0),
+    0
+  );
+
+  const totalTransactions = completedPayments.length;
 
   // CRUD Operations for Barbers
   const handleBarberSubmit = async (e) => {
@@ -682,9 +711,59 @@ const AdminDashboard = ({ onLogout }) => {
         )}
 
         {activeTab === 'pos' && (
-          <div style={sectionStyle}>
-            <h3 style={sectionTitleStyle}>Point of Sale</h3>
-            <p style={{ color: '#aaa' }}>POS system coming soon...</p>
+          <div>
+            <h2 style={{ color: '#BD9245', marginBottom: '20px' }}>Payments</h2>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '30px' }}>
+              <div style={sectionStyle}>
+                <h3 style={{ color: '#BD9245', margin: '0 0 10px 0' }}>Total Revenue</h3>
+                <div style={{ fontSize: '24px', fontWeight: 'bold' }}>
+                  ₱{totalRevenue.toFixed(2)}
+                </div>
+              </div>
+              <div style={sectionStyle}>
+                <h3 style={{ color: '#BD9245', margin: '0 0 10px 0' }}>Completed Transactions</h3>
+                <div style={{ fontSize: '24px', fontWeight: 'bold' }}>{totalTransactions}</div>
+              </div>
+            </div>
+
+            <div style={sectionStyle}>
+              <h3 style={sectionTitleStyle}>Payment History</h3>
+              {completedPayments.length > 0 ? (
+                <table style={tableStyle}>
+                  <thead>
+                    <tr>
+                      <th style={thStyle}>Customer</th>
+                      <th style={thStyle}>Amount</th>
+                      <th style={thStyle}>Method</th>
+                      <th style={thStyle}>Deposit</th>
+                      <th style={thStyle}>Date</th>
+                      <th style={thStyle}>Transaction ID</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {completedPayments.map(payment => {
+                      const paymentDate = getPaymentDate(payment);
+                      return (
+                        <tr key={payment.id}>
+                          <td style={tdStyle}>{payment.customerName || 'N/A'}</td>
+                          <td style={tdStyle}>
+                            {payment.currency || ''} {parseFloat(payment.amount || 0).toFixed(2)}
+                          </td>
+                          <td style={tdStyle}>{payment.paymentMethod || 'N/A'}</td>
+                          <td style={tdStyle}>{payment.deposit ? 'Yes' : 'No'}</td>
+                          <td style={tdStyle}>
+                            {paymentDate ? paymentDate.toLocaleDateString() : 'N/A'}
+                          </td>
+                          <td style={tdStyle}>{payment.transactionId || 'N/A'}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              ) : (
+                <p style={{ color: '#aaa' }}>No completed payments found.</p>
+              )}
+            </div>
           </div>
         )}
       </main>
