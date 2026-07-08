@@ -1,13 +1,42 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../firebaseConfig';
+import { db, firebaseConfig } from '../firebaseConfig';
 import { 
   collection, 
   getDocs, 
   addDoc, 
-  updateDoc, 
+  updateDoc,
+  setDoc,
   deleteDoc, 
   doc
 } from 'firebase/firestore';
+import { initializeApp, deleteApp } from 'firebase/app';
+import {
+  getAuth,
+  createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
+  signOut
+} from 'firebase/auth';
+
+// Creates a real Firebase Auth account for a new barber WITHOUT logging out
+// the currently signed-in admin. Uses a temporary secondary Firebase app
+// instance so the admin's session in the main `auth` stays untouched.
+const createBarberAuthAccount = async (email) => {
+  const secondaryApp = initializeApp(firebaseConfig, `SecondaryBarberCreation-${Date.now()}`);
+  const secondaryAuth = getAuth(secondaryApp);
+  try {
+    const tempPassword = Math.random().toString(36).slice(-10) + 'Aa1!';
+    const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, tempPassword);
+    // Barber sets their own password via the emailed reset link instead of
+    // being handed a plaintext temp password.
+    await sendPasswordResetEmail(secondaryAuth, email);
+    return userCredential.user.uid;
+  } finally {
+    // Clean up the secondary session/app regardless of success or failure
+    // so it never lingers or interferes with the admin's session.
+    try { await signOut(secondaryAuth); } catch (_) {}
+    await deleteApp(secondaryApp);
+  }
+};
 
 const dashboardContainerStyle = {
   backgroundColor: '#1C1D1D',
@@ -347,20 +376,32 @@ const AdminDashboard = ({ onLogout }) => {
     e.preventDefault();
     try {
       if (editingBarber) {
+        // Editing an existing barber: doc ID is already the barber's UID,
+        // just update the profile fields.
         await updateDoc(doc(db, 'barbers', editingBarber.id), barberForm);
         setBarbers(barbers.map(b => b.id === editingBarber.id ? { ...b, ...barberForm } : b));
         showNotification('Barber updated successfully!');
       } else {
-        const docRef = await addDoc(collection(db, 'barbers'), barberForm);
-        setBarbers([...barbers, { id: docRef.id, ...barberForm }]);
-        showNotification('Barber added successfully!');
+        // New barber: create the real Firebase Auth account first, then use
+        // that account's UID as the "barbers" document ID (setDoc, not
+        // addDoc), so it matches request.auth.uid == barberId in the
+        // Firestore rules and matches what ProfileActivity expects on the
+        // Android app (barbers/{uid}).
+        const uid = await createBarberAuthAccount(barberForm.email);
+        await setDoc(doc(db, 'barbers', uid), barberForm);
+        setBarbers([...barbers, { id: uid, ...barberForm }]);
+        showNotification('Barber account created! A password setup email was sent to ' + barberForm.email);
       }
       
       setBarberForm({ name: '', email: '', phone: '', specialization: '', status: 'active' });
       setShowBarberForm(false);
       setEditingBarber(null);
     } catch (err) {
-      showNotification('Error saving barber: ' + err.message, 'error');
+      if (err.code === 'auth/email-already-in-use') {
+        showNotification('That email already has an account. Use a different email for this barber.', 'error');
+      } else {
+        showNotification('Error saving barber: ' + err.message, 'error');
+      }
     }
   };
 
